@@ -21,6 +21,12 @@ def validate_config(cfg: dict) -> None:
     budget = cfg["budget"]
     if not (budget["ideal"] <= budget["soft_limit"] <= budget["exceptional_limit"]):
         raise ValueError("budget deve obedecer ideal <= soft_limit <= exceptional_limit")
+    health=cfg.get("health",{})
+    if not 0 <= float(health.get("healthy_min_coverage",0.5)) <= 1:
+        raise ValueError("health.healthy_min_coverage deve estar entre 0 e 1")
+    for key in ("critical_min_targets","healthy_min_stores","alert_cooldown_hours"):
+        if key in health and float(health[key]) <= 0:
+            raise ValueError(f"health.{key} deve ser positivo")
     ids=set()
     for group in (cfg.get("phones", []), cfg.get("aspirational", [])):
         for item in group:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 import unicodedata
 from typing import Optional
 from .models import Target
@@ -18,6 +19,8 @@ def strip_accents(s: str) -> str:
 
 def norm(s: str) -> str:
     s = strip_accents(s.lower())
+    # S25+ is a different model; punctuation stripping must not turn it into S25.
+    s = re.sub(r"\b(s\d{2})\+", r"\1 plus ", s)
     s = re.sub(r"[^a-z0-9]+", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
@@ -26,7 +29,7 @@ def parse_brl(value: str | float | int | None) -> Optional[float]:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        return float(value) if not isinstance(value, bool) and math.isfinite(value) else None
     s = str(value).strip().replace("R$", "").replace("\xa0", " ").strip()
     m = re.search(r"\d[\d\.]*[,]\d{2}|\d[\d\.]*", s)
     if not m:
@@ -59,44 +62,56 @@ def detect_condition(text: str, explicit: str | None = None) -> str:
     t=norm(text)
     if "recondicionado" in e or "refurb" in e or "recondicionado" in t or "refurb" in t:
         return "refurbished"
-    if "usado" in e or any(w in t for w in USED_WORDS):
+    if e in {"used", "2230581"} or "usedcondition" in e or "usado" in e or any(w in t for w in USED_WORDS):
         return "used"
-    if e in {"new", "novo", "2230284"} or "novo lacrado" in t or "lacrado" in t:
+    if e in {"new", "novo", "2230284"} or "newcondition" in e or "novo lacrado" in t or "lacrado" in t:
         return "new"
     return "unknown"
 
 
 def is_accessory(text: str) -> bool:
     t=norm(text)
-    return any(w in t for w in ACCESSORY_WORDS)
+    return any(re.search(r"\b" + re.escape(w) + r"\b", t) for w in ACCESSORY_WORDS)
 
 
 def match_target(title: str, targets: list[Target]) -> Optional[Target]:
+    if is_accessory(title):
+        return None
     tnorm=norm(title)
     storage=extract_storage_gb(title)
-    best=None
-    best_score=-1
+    brand=infer_brand(title)
+    variants={"fe", "ultra", "pro", "plus", "max", "mini", "lite", "neo", "fold", "flip", "edge", "fusion"}
+    title_variants=set(tnorm.split()) & variants
+    matches=[]
+    def model_tokens(text):
+        # Remove memory capacities, but preserve model numbers (Edge 60/70,
+        # iPhone 15/16). Dropping all numeric tokens silently crosses models.
+        identity=re.sub(r"\b\d{1,4}\s*(?:gb|tb)\b"," ",norm(text))
+        return [x for x in identity.split() if x not in {"samsung","apple","motorola","xiaomi","poco","5g","4g"}]
     for target in targets:
+        if brand is None or norm(brand) != norm(target.brand):
+            continue
         if storage is not None and storage != target.storage_gb:
             continue
         for alias in target.aliases:
-            a=norm(alias)
-            toks=[x for x in a.split() if x not in {"samsung","apple","motorola","xiaomi","poco","gb"} and not x.isdigit()]
-            score=sum(1 for tok in toks if tok in tnorm.split())
-            must=[tok for tok in toks if re.search(r"\d", tok)]
-            if must and not all(tok in tnorm.split() for tok in must):
+            toks=model_tokens(alias)
+            if (set(toks) & variants) != title_variants:
                 continue
-            if score > best_score and score >= max(1, len(toks)-1):
-                best=target; best_score=score
-    return best
+            if toks and all(tok in model_tokens(title) for tok in toks):
+                matches.append(target)
+                break
+    # Ambiguous titles must not silently select the first configured target.
+    return matches[0] if len(matches) == 1 else None
 
 
 def infer_brand(title: str) -> Optional[str]:
     t=norm(title)
-    for brand in ("samsung", "apple", "motorola", "xiaomi", "poco"):
+    # POCO takes precedence over its parent Xiaomi in "Xiaomi POCO F7".
+    for brand in ("poco", "samsung", "apple", "motorola", "xiaomi", "realme", "asus", "oneplus", "honor", "oppo", "vivo", "huawei", "nokia", "infinix", "tecno"):
         if brand in t.split(): return brand.title() if brand != "poco" else "POCO"
     if "iphone" in t: return "Apple"
     if "galaxy" in t: return "Samsung"
+    if "edge" in t.split(): return "Motorola"
     return None
 
 

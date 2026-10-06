@@ -3,55 +3,58 @@ from __future__ import annotations
 import os,re,time
 from urllib.parse import quote_plus, urljoin
 from bs4 import BeautifulSoup
-from .base import CollectorResult, build_session
+from .base import CollectorResult, build_session, error_reason, stop_source
 from ..models import Offer, Target
-from ..normalize import detect_condition, extract_storage_gb, is_accessory, match_target, infer_brand, norm
+from ..normalize import detect_condition, extract_storage_gb, is_accessory, match_target, infer_brand, norm, parse_brl
 
 class MercadoLivreCollector:
     name="Mercado Livre"
     API="https://api.mercadolibre.com"
     WEB="https://lista.mercadolivre.com.br"
 
-    def __init__(self,cfg:dict):
+    def __init__(self,cfg:dict,cloud:bool=False):
         self.cfg=cfg
         self.timeout=float(cfg.get("timeout_seconds",12)); self.delay=float(cfg.get("min_delay_seconds",1.2))
         self.limit=int(cfg.get("results_per_query",20)); self.token=os.getenv("ML_ACCESS_TOKEN","").strip()
-        self.s=build_session(cfg.get("user_agent","Mozilla/5.0 SmartphoneDealMonitor/1.0"),int(cfg.get("retries",2)))
-        if self.token: self.s.headers["Authorization"]="Bearer "+self.token
+        self.s=build_session(cfg.get("user_agent","SmartphoneDealMonitor/1.0"),int(cfg.get("retries",2)))
+        self.cloud=cloud
+        self.web=build_session(cfg.get("user_agent","SmartphoneDealMonitor/1.0"),int(cfg.get("retries",2)))
+        self.blocked=""
 
     def collect(self, targets:list[Target]) -> CollectorResult:
-        offers=[]; errors=[]
-        for i,t in enumerate(targets):
-            q=t.name
-            try:
-                got=self._api_search(q,t,targets)
-                offers.extend(got)
-            except Exception as e:
-                errors.append(f"API {t.id}: {type(e).__name__}: {e}")
-                try: offers.extend(self._web_search(q,t,targets))
-                except Exception as e2: errors.append(f"web {t.id}: {type(e2).__name__}: {e2}")
-            if i < len(targets)-1: time.sleep(self.delay)
-        ok=bool(offers) or not errors
-        msg=f"{len(offers)} ofertas" + (f"; {len(errors)} falhas parciais" if errors else "")
-        if errors: msg += " | " + " || ".join(errors[:3])
-        return CollectorResult(self.name,offers,ok,msg)
+        return self._queries([(t.name,t) for t in targets],targets,self.name)
 
     def discover(self, targets:list[Target]) -> CollectorResult:
         queries=self.cfg.get("discovery_queries",["Samsung Galaxy 256GB","Motorola Edge Pro 256GB","Xiaomi 256GB","POCO 512GB","iPhone 128GB"])
+        return self._queries([(q,None) for q in queries],targets,self.name+" discovery")
+
+    def _queries(self,queries,targets,name):
+        fallback=not self.cloud and self.cfg.get("public_web_fallback",False)
+        if self.blocked:
+            return CollectorResult(name,[],False,"Fonte suspensa nesta coleta: "+self.blocked,"skipped",self.blocked)
+        if not self.token and not fallback:
+            return CollectorResult(name,[],False,"ML_ACCESS_TOKEN ausente; API não consultada. Fallback HTML desativado.","skipped","missing_credential")
         offers=[]; errors=[]
-        for q in queries:
-            try: offers.extend(self._api_search(q,None,targets))
-            except Exception as e:
-                errors.append(f"API {q}: {type(e).__name__}: {e}")
-                try: offers.extend(self._web_search(q,None,targets))
-                except Exception as e2: errors.append(f"web {q}: {type(e2).__name__}: {e2}")
-            time.sleep(self.delay)
-        return CollectorResult(self.name+" discovery",offers,bool(offers) or not errors,"; ".join(errors[:3]) if errors else f"{len(offers)} candidatos")
+        for i,(q,target) in enumerate(queries):
+            try:
+                offers.extend(self._api_search(q,target,targets) if self.token else self._web_search(q,target,targets))
+            except Exception as exc:
+                reason=error_reason(exc); errors.append(reason)
+                if stop_source(exc):
+                    self.blocked=reason
+                    break
+            if i < len(queries)-1:
+                time.sleep(self.delay)
+        msg=f"{len(offers)} ofertas; {len(errors)} falhas"
+        if errors: msg+="; "+", ".join(sorted(set(errors)))+". 401/403 não prova que um token resolverá acesso."
+        return CollectorResult(name,_dedup(offers),not errors,msg,reason=errors[0] if errors else "")
 
     def _api_search(self,q:str,target:Target|None,targets:list[Target]):
         url=self.API+"/sites/MLB/search"
-        r=self.s.get(url,params={"q":q,"limit":self.limit},timeout=self.timeout)
-        if r.status_code in (401,403): raise RuntimeError(f"HTTP {r.status_code}; configure ML_ACCESS_TOKEN ou use fallback web")
+        if not self.token:
+            raise ValueError("ML_ACCESS_TOKEN ausente")
+        # Authentication is scoped to the official API, never the HTML fallback.
+        r=self.s.get(url,params={"q":q,"limit":self.limit,"condition":"new"},headers={"Authorization":"Bearer "+self.token},timeout=self.timeout)
         r.raise_for_status(); data=r.json(); out=[]
         for item in data.get("results",[]):
             title=str(item.get("title") or "")
@@ -59,28 +62,36 @@ class MercadoLivreCollector:
             cond=detect_condition(title,_condition_from_attributes(item) or str(item.get("condition") or ""))
             if cond in {"used","refurbished"}: continue
             price=item.get("price")
-            if not isinstance(price,(int,float)) or price<200: continue
-            found=target or match_target(title,targets)
-            storage=extract_storage_gb(title) or _storage_from_attributes(item)
+            price=parse_brl(price)
+            if price is None or price<200 or item.get("currency_id") != "BRL": continue
+            if item.get("available_quantity") == 0: continue
+            title_storage=extract_storage_gb(title)
+            attribute_storage=_storage_from_attributes(item)
+            if title_storage and attribute_storage and title_storage != attribute_storage: continue
+            storage=title_storage or attribute_storage
+            found=match_target(title+f" {storage}GB" if storage else title,targets)
+            if target and (not found or found.id != target.id): continue
             if found and storage != found.storage_gb:
                 continue
             if storage is None:
                 continue
             seller=item.get("seller") or {}
             seller_level=seller.get("reputation_level_id") or seller.get("seller_reputation",{}).get("level_id")
-            o=Offer(source="mercadolivre_api",store="Mercado Livre",title=title,url=item.get("permalink") or "",price_base=float(price),
+            url=item.get("permalink") or ""
+            if not url.startswith("https://"): continue
+            o=Offer(source="mercadolivre_api",store="Mercado Livre",title=title,url=url,price_base=float(price),
                     seller=str(seller.get("nickname") or seller.get("id") or "") or None,seller_id=str(seller.get("id") or "") or None,
                     seller_level=str(seller_level or "") or None,is_official_store=bool(item.get("official_store_id")),condition=cond,
                     shipping=0.0 if (item.get("shipping") or {}).get("free_shipping") is True else None,
                     stock="available" if (item.get("available_quantity") or 0)>0 else None,target_id=found.id if found else None,
                     canonical_name=found.name if found else _canonical_guess(title),brand=found.brand if found else infer_brand(title),storage_gb=storage,
-                    raw={"id":item.get("id"),"original_price":item.get("original_price"),"official_store_id":item.get("official_store_id"),"catalog_product_id":item.get("catalog_product_id")})
+                    price_list=parse_brl(item.get("original_price")),raw={"id":item.get("id"),"original_price":item.get("original_price"),"official_store_id":item.get("official_store_id"),"catalog_product_id":item.get("catalog_product_id")})
             out.append(o)
         return _dedup(out)
 
     def _web_search(self,q:str,target:Target|None,targets:list[Target]):
         slug=re.sub(r"[^a-zA-Z0-9]+","-",q).strip("-")
-        r=self.s.get(f"{self.WEB}/{quote_plus(slug)}",timeout=self.timeout); r.raise_for_status()
+        r=self.web.get(f"{self.WEB}/{quote_plus(slug)}",timeout=self.timeout); r.raise_for_status()
         soup=BeautifulSoup(r.text,"html.parser"); out=[]
         cards=soup.select("li.ui-search-layout__item, div.poly-card, div.ui-search-result")
         if not cards:
@@ -94,7 +105,8 @@ class MercadoLivreCollector:
             if cond in {"used","refurbished"}: continue
             p=_first_price(c.get_text(" ",strip=True))
             if not p or p<200: continue
-            found=target or match_target(title,targets)
+            found=match_target(title,targets)
+            if target and (not found or found.id != target.id): continue
             storage=extract_storage_gb(title)
             if found and storage != found.storage_gb:
                 continue

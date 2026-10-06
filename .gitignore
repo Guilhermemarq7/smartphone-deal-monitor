@@ -13,5 +13,7 @@ logs/*.log
 logs/*.jsonl
 output/*.csv
 output/*.md
+output/*.json
+outputs/
 !output/.gitkeep
 !logs/.gitkeep

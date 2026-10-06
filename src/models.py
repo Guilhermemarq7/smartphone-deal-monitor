@@ -50,6 +50,7 @@ class Offer:
     coupon_limited: bool = False
     notes: list[str] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
+    price_list: Optional[float] = None
 
     @property
     def price_final_direct(self) -> float:

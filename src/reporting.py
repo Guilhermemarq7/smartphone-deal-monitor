@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+import json
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 from .models import Deal
 
@@ -12,10 +14,19 @@ def brl(v):
 
 def pct(v): return "—" if v is None else f"{v*100:.1f}%"
 
-def write_reports(deals:list[Deal],statuses:list[dict],outdir:Path):
+
+def report_time():
+    try:
+        zone=ZoneInfo('America/Sao_Paulo')
+    except ZoneInfoNotFoundError:
+        # Windows may lack the IANA database; São Paulo currently uses UTC-3.
+        zone=timezone(timedelta(hours=-3))
+    return datetime.now(zone).strftime('%d/%m/%Y %H:%M:%S %Z')
+
+def write_reports(deals:list[Deal],statuses:list[dict],outdir:Path,health=None):
     outdir.mkdir(parents=True,exist_ok=True)
     ordered=sorted(deals,key=lambda d:(d.score,-d.offer.price_final_direct),reverse=True)
-    fields=["classification","score","model","store","seller","price_base","price_pix","coupon_discount","cashback","price_final_direct","price_effective_cashback","median_30d","min_90d","discount_real","condition","source","url"]
+    fields=["classification","score","model","store","seller","price_list","price_base","price_pix","coupon_discount","cashback","shipping","price_final_direct","price_effective_cashback","median_30d","min_90d","discount_real","condition","source","url"]
     with (outdir/"latest_prices.csv").open("w",encoding="utf-8-sig",newline="") as f:
         w=csv.DictWriter(f,fieldnames=fields);w.writeheader()
         for d in ordered:w.writerow(_row(d))
@@ -23,8 +34,18 @@ def write_reports(deals:list[Deal],statuses:list[dict],outdir:Path):
         w=csv.DictWriter(f,fieldnames=fields);w.writeheader()
         for d in ordered:
             if d.score>=62:w.writerow(_row(d))
-    lines=["# Radar de smartphones — relatório atual","",f"Gerado em: {datetime.now().astimezone().strftime('%d/%m/%Y %H:%M:%S %Z')}","","## Status das fontes",""]
-    for s in statuses: lines.append(f"- **{'OK' if s['ok'] else 'ERRO'} — {s['source']}**: {s['message']}")
+    lines=["# Radar de smartphones — relatório atual","",f"Gerado em: {report_time()}",""]
+    if health:
+        lines += [f"## Saúde da coleta: {health.level}","",health.message,"",
+                  f"- Lojas live: {len(health.live_stores)} ({', '.join(health.live_stores) or 'nenhuma'})",
+                  f"- Variantes com preço válido: {len(health.covered_targets)}/{health.target_count}",
+                  f"- Ofertas aceitas após filtros: {health.offers_count}",
+                  f"- Fontes com falha: {', '.join(health.failures) or 'nenhuma'}",""]
+        (outdir/"health.json").write_text(json.dumps(health.to_dict(),ensure_ascii=False,indent=2),encoding="utf-8")
+    lines += ["## Status das fontes",""]
+    for s in statuses:
+        state="IGNORADA" if s.get("state") == "skipped" else ("OK" if s["ok"] else "ERRO/PARCIAL")
+        lines.append(f"- **{state} — {s['source']}**: {s['message']}")
     lines += ["","## Melhores oportunidades",""]
     if not ordered: lines += ["Nenhuma oferta válida foi coletada nesta execução.",""]
     for d in ordered[:30]:
@@ -33,8 +54,9 @@ def write_reports(deals:list[Deal],statuses:list[dict],outdir:Path):
         if d.suspicious_outlier: lines += ["> **OUTLIER:** verificar variante, seller, condição, cupom e possível erro de preço antes de comprar.",""]
     (outdir/"report.md").write_text("\n".join(lines),encoding="utf-8")
 
-def print_terminal(deals:list[Deal],statuses:list[dict]):
+def print_terminal(deals:list[Deal],statuses:list[dict],health=None):
     print("="*68);print(" RADAR DE SMARTPHONES — 10/10 DEAL MONITOR");print("="*68)
+    if health: print(f"SAÚDE: {health.level} — {len(health.live_stores)} lojas; {len(health.covered_targets)}/{health.target_count} variantes. {health.message}")
     print("Status das fontes:")
     for s in statuses: print(f"[{'OK' if s['ok'] else 'ERRO'}] {s['source']}: {s['message']}")
     print("-"*68)
@@ -55,4 +77,4 @@ def print_terminal(deals:list[Deal],statuses:list[dict]):
 
 def _row(d):
     o=d.offer
-    return {"classification":d.classification,"score":d.score,"model":o.canonical_name or o.title,"store":o.store,"seller":o.seller,"price_base":o.price_base,"price_pix":o.price_pix,"coupon_discount":o.coupon_discount,"cashback":o.cashback,"price_final_direct":o.price_final_direct,"price_effective_cashback":o.price_effective_cashback,"median_30d":d.stats.median_30d,"min_90d":d.stats.min_90d,"discount_real":d.discount_real,"condition":o.condition,"source":o.source,"url":o.url}
+    return {"classification":d.classification,"score":d.score,"model":o.canonical_name or o.title,"store":o.store,"seller":o.seller,"price_list":o.price_list,"price_base":o.price_base,"price_pix":o.price_pix,"coupon_discount":o.coupon_discount,"cashback":o.cashback,"shipping":o.shipping,"price_final_direct":o.price_final_direct,"price_effective_cashback":o.price_effective_cashback,"median_30d":d.stats.median_30d,"min_90d":d.stats.min_90d,"discount_real":d.discount_real,"condition":o.condition,"source":o.source,"url":o.url}

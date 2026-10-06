@@ -47,7 +47,7 @@ jobs:
           cache: 'pip'
 
       - name: Restaurar histórico SQLite
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: data/radar.db
           key: radar-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -57,6 +57,9 @@ jobs:
       - name: Instalar dependências
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
+      - name: Executar testes
+        run: python -m pytest -q
+
       - name: Validar configuração cloud
         run: python tools/cloud_preflight.py
 
@@ -65,7 +68,7 @@ jobs:
         run: python tools/telegram_test.py
 
       - name: Executar radar
-        run: python main.py
+        run: python main.py --cloud --fail-on-critical
 
       - name: Mostrar relatório no resumo da execução
         if: always()
@@ -76,3 +79,11 @@ jobs:
           else
             echo "Nenhum report.md foi gerado." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # CRITICAL returns a nonzero exit code, but history and alert cooldown must survive.
+      - name: Persistir histórico mesmo com coleta crítica
+        if: ${{ always() && hashFiles('data/radar.db') != '' }}
+        uses: actions/cache/save@v6
+        with:
+          path: data/radar.db
+          key: radar-state-${{ github.run_id }}-${{ github.run_attempt }}

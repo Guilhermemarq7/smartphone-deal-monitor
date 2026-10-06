@@ -1,0 +1,176 @@
+{
+  "productId": "139130",
+  "productName": "Smartphone Samsung Galaxy S25 FE 5G Tela 6,7 AMOLED 256GB 8GB RAM Câmera 50MP JetBlack",
+  "link": "https://site.fastshop.com.br/smartphone-samsung-galaxy-s25-fe-5g-tela-67-amoled-256gb-8gb-ram-camera-50mp-jetblack-139130/p",
+  "categories": [
+    "/Celular Tablet e Smartwatch/Celular e Smartphone/",
+    "/Celular Tablet e Smartwatch/"
+  ],
+  "items": [
+    {
+      "itemId": "147839",
+      "nameComplete": "Smartphone Samsung Galaxy S25 FE 5G Tela 6,7 AMOLED 256GB 8GB RAM Câmera 50MP JetBlack",
+      "isKit": false,
+      "sellers": [
+        {
+          "sellerId": "cnl222",
+          "sellerName": "Ponto",
+          "commertialOffer": {
+            "Price": 4398.99,
+            "ListPrice": 4398.99,
+            "IsAvailable": true,
+            "AvailableQuantity": 1,
+            "PaymentOptions": {
+              "paymentSystems": [
+                {
+                  "id": 125,
+                  "groupName": "instantPaymentPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 210,
+                  "groupName": "custom210PaymentGroupPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 1,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 2,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 3,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 4,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 8,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                },
+                {
+                  "id": 9,
+                  "groupName": "creditCardPaymentGroup",
+                  "requiresAuthentication": false
+                }
+              ],
+              "installmentOptions": [
+                {
+                  "paymentSystem": "1",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "2",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "3",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "4",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "8",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "9",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "125",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 409106
+                    }
+                  ]
+                },
+                {
+                  "paymentSystem": "210",
+                  "bin": null,
+                  "installments": [
+                    {
+                      "count": 1,
+                      "hasInterestRate": false,
+                      "total": 439899
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "sellerId": "1",
+          "sellerName": "Fast Shop",
+          "commertialOffer": {
+            "Price": 0.0,
+            "ListPrice": 0.0,
+            "IsAvailable": false,
+            "AvailableQuantity": 0,
+            "PaymentOptions": {
+              "paymentSystems": [],
+              "installmentOptions": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

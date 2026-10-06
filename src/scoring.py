@@ -101,5 +101,5 @@ def seller_trust_level(o: Offer) -> str:
     if any(x in lv for x in ["5_green","green","platinum","mercadolider platinum"]): return "A"
     if any(x in lv for x in ["4_light_green","gold","mercadolider"]): return "B"
     if any(x in lv for x in ["red","orange","yellow"]): return "D"
-    if o.seller and o.seller.lower() in {"magalu","amazon","samsung","motorola"}: return "A"
+    if o.seller and o.seller.lower() in {"magalu","amazon","samsung","motorola","fast shop"}: return "A"
     return "C"

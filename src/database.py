@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS alert_events(
  url TEXT, store TEXT, seller TEXT, score REAL, classification TEXT, price REAL, channel TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_alert_events_fp_time ON alert_events(fingerprint, created_at);
+CREATE TABLE IF NOT EXISTS operational_alerts(
+ fingerprint TEXT PRIMARY KEY, sent_at TEXT NOT NULL
+);
 """
 
 class Database:
@@ -131,6 +134,14 @@ class Database:
         self.conn.execute("""INSERT INTO alert_events(fingerprint,created_at,product_id,url,store,seller,score,classification,price,channel)
         VALUES(?,?,?,?,?,?,?,?,?,?)""",(fingerprint,datetime.now(timezone.utc).isoformat(),o.target_id,o.url,o.store,o.seller,deal.score,deal.classification,round(o.price_final_direct,2),channel))
         self.conn.commit()
+
+    def operational_alert_recent(self, fingerprint:str, hours:float=24) -> bool:
+        cutoff=(datetime.now(timezone.utc)-timedelta(hours=max(0,float(hours)))).isoformat()
+        return bool(self.conn.execute("SELECT 1 FROM operational_alerts WHERE fingerprint=? AND sent_at>=?",(fingerprint,cutoff)).fetchone())
+
+    def record_operational_alert(self, fingerprint:str):
+        with self.conn:
+            self.conn.execute("INSERT INTO operational_alerts(fingerprint,sent_at) VALUES(?,?) ON CONFLICT(fingerprint) DO UPDATE SET sent_at=excluded.sent_at",(fingerprint,datetime.now(timezone.utc).isoformat()))
 
 
     def prune(self, price_days:int=120, run_days:int=30, alert_days:int=30):

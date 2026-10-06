@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 from .models import Deal
 from .telegram import TelegramClient
+from .collectors.base import error_reason
 
 
 def _brl(v: float) -> str:
@@ -67,6 +68,10 @@ def should_notify(d: Deal, cfg: dict) -> bool:
     acfg = cfg.get("alerts", {})
     if d.offer.condition in {"used", "refurbished"}:
         return False
+    if any((d.offer.requires_tradein,d.offer.requires_card,d.offer.requires_subscription,d.offer.requires_first_purchase)):
+        return False
+    if d.offer.coupon_limited and d.offer.coupon_discount:
+        return False
     if d.suspicious_outlier and acfg.get("alert_outliers", True):
         return True
     min_score = float(acfg.get("min_score", 76))
@@ -88,7 +93,7 @@ def send_optional_alerts(deals: list[Deal], cfg: dict, db, log_path: Path):
             try:
                 telegram = (TelegramClient(token), chat)
             except Exception as exc:
-                print(f"[ALERTA] Telegram não inicializado: {exc}")
+                print(f"[ALERTA] Telegram não inicializado: {error_reason(exc)}")
         else:
             print("[ALERTA] Telegram habilitado, mas TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID não estão configurados.")
 
@@ -111,14 +116,14 @@ def send_optional_alerts(deals: list[Deal], cfg: dict, db, log_path: Path):
                 delivered = True
                 print(f"[ALERTA] Telegram enviado: {d.offer.canonical_name or d.offer.title} — {_brl(d.offer.price_final_direct)}")
             except Exception as exc:
-                print(f"[ALERTA] Telegram falhou: {type(exc).__name__}: {exc}")
+                print(f"[ALERTA] Telegram falhou: {error_reason(exc)}")
 
         if discord_session and discord_url:
             try:
                 discord_session.post(discord_url, json={"content": msg[:1900]}, timeout=10).raise_for_status()
                 delivered = True
             except Exception as exc:
-                print(f"[ALERTA] Discord falhou: {type(exc).__name__}: {exc}")
+                print(f"[ALERTA] Discord falhou: {error_reason(exc)}")
 
         # Local/no-channel mode still deduplicates the opportunity log. When a configured
         # remote channel fails, do NOT mark success: the next run will retry delivery.
@@ -130,3 +135,31 @@ def send_optional_alerts(deals: list[Deal], cfg: dict, db, log_path: Path):
             sent += 1
 
     return sent
+
+
+def send_operational_alert(health,cfg,db):
+    """One CRITICAL notification per cooldown, separate from promotion fingerprints."""
+    hcfg=cfg.get("health",{})
+    if health.level != "CRITICAL" or not hcfg.get("operational_alerts",True):
+        return False
+    if not cfg.get("alerts",{}).get("telegram",{}).get("enabled",False):
+        return False
+    fingerprint="collection-critical-v1"
+    if db.operational_alert_recent(fingerprint,hcfg.get("alert_cooldown_hours",24)):
+        return False
+    token=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
+    chat=os.getenv("TELEGRAM_CHAT_ID","").strip()
+    if not token or not chat:
+        return False
+    message=("⚠️ ALERTA OPERACIONAL — Radar CRITICAL\n"
+             +health.message+f"\nCobertura: {len(health.covered_targets)}/{health.target_count} variantes; "
+             +f"{len(health.live_stores)} lojas com preços válidos.\n"
+             +"Fontes com falha: "+(", ".join(health.failures) or "nenhuma; cobertura insuficiente")
+             +"\nConsulte o Job Summary. Este aviso não é uma promoção.")
+    try:
+        TelegramClient(token).send_message(chat,message[:4000])
+    except Exception as exc:
+        print(f"[SAÚDE] Alerta operacional não entregue: {error_reason(exc)}")
+        return False
+    db.record_operational_alert(fingerprint)
+    return True

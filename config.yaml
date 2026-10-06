@@ -35,6 +35,13 @@ discovery:
 condition:
   new_only: true
 
+health:
+  critical_min_targets: 2
+  healthy_min_stores: 2
+  healthy_min_coverage: 0.5
+  operational_alerts: true
+  alert_cooldown_hours: 24
+
 alerts:
   min_score: 76
   alert_outliers: true
@@ -46,13 +53,43 @@ alerts:
     enabled: false
 
 sources:
+  vtex:
+    enabled: true
+    cloud_enabled: true
+    timeout_seconds: 12
+    retries: 1
+    min_delay_seconds: 1.5
+    results_per_query: 50
+    user_agent: 'SmartphoneDealMonitor/1.0'
+    stores:
+      - name: Fast Shop
+        base_url: https://site.fastshop.com.br
+        currency: BRL
+        # Curated retail sellers observed in public catalog; reject other marketplace sellers.
+        seller_ids: ['1', 'cnl222', 'cnl223'] # Fast Shop, Ponto, Casas Bahia
+        new_products_only: true
+        # Public category IDs verified in the retailer response; exclude accessories.
+        filters: ['C:/18/113/']
+        discovery_queries: ['Samsung Galaxy Ultra 256GB', 'iPhone 128GB']
+      - name: Motorola
+        base_url: https://www.motorola.com.br
+        currency: BRL
+        seller_ids: ['1']
+        new_products_only: true
+        manufacturer_official: true
+        sku_query_param: idsku
+        target_ids: ['edge_70_pro_256', 'edge_60_pro_512']
+        discovery_queries: ['Motorola Edge Pro']
   mercadolivre:
     enabled: true
+    cloud_enabled: true
+    # API requires ML_ACCESS_TOKEN. A token alone does not guarantee search access.
+    public_web_fallback: false
     timeout_seconds: 12
     retries: 2
     min_delay_seconds: 1.2
     results_per_query: 20
-    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    user_agent: 'SmartphoneDealMonitor/1.0'
     discovery_queries:
       - 'Samsung Galaxy Ultra 256GB'
       - 'Samsung Galaxy S26 256GB'
@@ -62,10 +99,12 @@ sources:
       - 'iPhone 16 128GB'
   magalu:
     enabled: true
+    # Public search HTML returned 403 on Actions; never bypass anti-bot protections.
+    cloud_enabled: false
     timeout_seconds: 12
     retries: 2
     min_delay_seconds: 1.5
-    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    user_agent: 'SmartphoneDealMonitor/1.0'
     discovery_queries:
       - 'Galaxy S Ultra 256GB'
       - 'Motorola Edge Pro 256GB'
@@ -73,10 +112,11 @@ sources:
       - 'iPhone 16 128GB'
   official_pages:
     enabled: true
+    cloud_enabled: true
     timeout_seconds: 12
     retries: 2
     min_delay_seconds: 1.5
-    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    user_agent: 'SmartphoneDealMonitor/1.0'
     pages:
       - target_id: galaxy_s25_256
         store: Samsung
@@ -90,6 +130,16 @@ sources:
       - target_id: edge_60_pro_512
         store: Motorola
         url: https://www.motorola.com.br/smartphone-motorola-edge-60-pro-5g-512gb/p?idsku=1779
+  # Extension point for individually verified public product pages from other stores.
+  # Use the verified VTEX integrations above; add HTML pages only after live validation.
+  structured_pages:
+    enabled: false
+    cloud_enabled: false
+    name: Páginas estruturadas adicionais
+    timeout_seconds: 12
+    retries: 2
+    min_delay_seconds: 1.5
+    pages: []
 
 phones:
   - id: galaxy_s25_fe_256

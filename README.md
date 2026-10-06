@@ -24,9 +24,11 @@ A pesquisa inicial está em `data/bootstrap/radar_celulares_10-10_2026.md` e ser
 
 ## Fontes implementadas
 
-- Mercado Livre API, com fallback para busca pública HTML quando necessário.
-- Magalu via busca pública.
-- Páginas oficiais Samsung/Motorola configuradas em `config.yaml`.
+- Mercado Livre API: usa `ML_ACCESS_TOKEN`; acesso atual ao endpoint precisa ser validado com o aplicativo autorizado. Sem token, a fonte é ignorada sem requisições. HTML é opt-in apenas local.
+- Magalu: busca pública opcional local; desabilitada por padrão no cloud após 403 relatado no Actions.
+- Páginas oficiais Samsung/Motorola configuradas em `config.yaml`: somente preço estruturado com variante/capacidade comprovadas.
+- Catálogos públicos VTEX de Fast Shop e Motorola: nova integração com preços/estoque por SKU, validada neste cloud.
+- Extensão para outras páginas estruturadas: disponível, desabilitada e vazia até validação live de cada loja.
 
 Nenhuma fonte inexistente é simulada. Quando uma fonte falha, as demais continuam.
 
@@ -207,7 +209,7 @@ Se futuramente você tiver um token oficial do Mercado Livre, pode criar também
 
 `ML_ACCESS_TOKEN`
 
-O monitor não depende obrigatoriamente dele porque possui fallback público.
+O radar como um todo não depende dele, mas a fonte Mercado Livre API exige `ML_ACCESS_TOKEN`. O fallback público é somente opt-in local e não é executado em GitHub Actions. Um token não garante permissão para busca; veja a auditoria e a documentação oficial antes de assumir que um HTTP 403 será resolvido.
 
 ## 4. Confirmar que Actions está habilitado
 
@@ -491,3 +493,146 @@ fingerprint já avisado recentemente?
       ↓ NÃO
 Telegram
 ```
+
+
+# Coleta cloud, saúde e validação
+
+A auditoria e as evidências estão em [docs/collector-audit.md](docs/collector-audit.md).
+Após um bloqueio inicial do proxy, a coleta live passou a funcionar neste cloud:
+Samsung e os catálogos públicos VTEX de Fast Shop/Motorola foram acessados. A
+documentação oficial VTEX confirma endpoint, filtros e limites usados. Mercado
+Livre e sua documentação continuaram retornando HTTP 403: não foi possível
+certificar a API de busca vigente em outubro de 2026 nem testar acesso autorizado.
+A disponibilidade neste cloud ainda precisa ser confirmada no runner Actions.
+
+| Fonte | Cloud | Local | Credenciais / evidência |
+| --- | --- | --- | --- |
+| Mercado Livre API | Tentativa autenticada habilitada | Tentativa autenticada | ML_ACCESS_TOKEN; endpoint existente, acesso atual não confirmado |
+| Mercado Livre HTML | Desabilitado sempre | Opt-in `public_web_fallback: true` | Sem credenciais; disponibilidade não confirmada |
+| Magalu HTML | Desabilitado por padrão | Opcional, sem preço validado | HTTP 200 aqui com zero ofertas no parser; 403 no runner relatado pelo usuário |
+| Samsung/Motorola HTML | Habilitadas | Habilitadas | Sem credenciais; variante, capacidade e preço estruturado exigidos; Samsung testado live |
+| Fast Shop/Motorola catálogo público VTEX | Habilitados | Habilitados | Sem credenciais nos hosts verificados; estoques/preços por SKU; testes live e mocks |
+| Outras páginas estruturadas | Desabilitadas/vazias | Desabilitadas/vazias | Habilitar somente depois de validar loja e produto reais |
+
+## Modo cloud versus local
+
+`GITHUB_ACTIONS=true` ativa o modo cloud automaticamente. Fora do Actions, use
+`--cloud` para reproduzir a seleção das fontes. Cada fonte usa `enabled` e
+`cloud_enabled`; Magalu tem `cloud_enabled: false`. Recusas 401/403/429 e falhas
+de proxy encerram as consultas daquela fonte na execução, incluindo discovery,
+em vez de repetir a recusa por aparelho. A próxima execução tenta novamente.
+Não há CAPTCHA bypass, cookies pessoais, proxies rotativos, spoofing ou navegador.
+
+Somente ofertas novas confirmadas entram no histórico quando `new_only: true`.
+Variante, capacidade, moeda e vínculo entre produto e preço precisam ser
+comprovados. Preço riscado não determina desconto real; parcelas, cashback,
+cupom não confirmado e condições de troca/cartão/assinatura não são tratados
+como preço direto garantido. O preço atual continua sendo avaliado **antes**
+de entrar no histórico que determina sua mediana. Frete ausente permanece
+desconhecido; confira o custo final no checkout.
+
+## Catálogos públicos VTEX
+
+A integração nova usa a [Legacy Search API documentada](https://developers.vtex.com/docs/api-reference/search-api)
+em hosts públicos que responderam sem autenticação. Não usa a API privada de
+catálogo ou alterações de carrinho/checkout. Cada busca tem no máximo 50 produtos,
+com atraso de 1,5 s, timeout e retries limitados; não varre o catálogo inteiro.
+Na Fast Shop, a categoria de celulares evita acessórios e a lista aceita somente
+sellers observados: Fast Shop, Ponto e Casas Bahia. Outros sellers são rejeitados.
+A saúde conta o canal Fast Shop uma vez, com o seller separado em cada oferta.
+Condição nova é a premissa do catálogo varejista desses sellers; usados/vitrine/
+recondicionados detectados são rejeitados, e confirme a condição no checkout.
+
+`Price`, `ListPrice` e preço Pix são separados. Pix vem do total de pagamento
+único explicitamente associado ao sistema Pix público sem autenticação ou BIN,
+em centavos; parcelas de cartão, cashback e Teasers não viram desconto direto.
+Estoque indisponível e preço expirado não produzem oferta. Motorola usa essa API
+para Edge 70 Pro/Edge 60 Pro e uma consulta limitada de discovery. Não há novo secret.
+
+## Mercado Livre e OAuth
+
+Use uma aplicação autorizada na plataforma oficial do Mercado Livre e o fluxo
+OAuth indicado na documentação de [autenticação e autorização](https://developers.mercadolivre.com.br/pt_br/autenticacao-e-autorizacao).
+O titular da conta autoriza a aplicação; o código de autorização é trocado por
+access token segundo a documentação. Mantenha client secret e refresh token fora
+do repositório. Este projeto **não implementa renovação automática**: tokens
+expirados ou sem permissão deixam a fonte indisponível. Antes de automatizar,
+confirme o acesso de busca na documentação de
+[itens e buscas](https://developers.mercadolivre.com.br/pt_br/itens-e-buscas).
+Estas páginas não puderam ser lidas neste ambiente, portanto o procedimento e a
+permissão exatos atuais ainda precisam ser conferidos, sem assumir acesso global.
+
+No GitHub, configure o access token em **Settings > Secrets and variables >
+Actions**, nome `ML_ACCESS_TOKEN`. O workflow já injeta esse secret. Localmente,
+use essa variável de ambiente ou `.env` ignorado pelo Git. Não cole valores em
+issues, logs, PRs ou no código. Os secrets existentes do Telegram não precisam
+ser alterados para os alertas operacionais.
+
+## Interpretar a saúde
+
+- **HEALTHY**: duas ou mais lojas, pelo menos 50% da lista com preços válidos e
+  nenhuma falha inesperada de fonte.
+- **DEGRADED**: pelo menos dois modelos com preço, mas cobertura insuficiente
+  ou falha parcial. Uma loja apenas continua DEGRADED.
+- **CRITICAL**: nenhuma oferta válida ou menos de dois modelos com preço
+  (o mínimo é limitado ao tamanho da lista monitorada).
+- **OFFLINE**: execução sem rede; nenhuma conclusão sobre saúde live.
+
+Ajuste os limiares na seção `health` do `config.yaml`. Contamos lojas e variantes
+**depois dos filtros**, sem usar bootstrap ou discovery como cobertura da lista.
+`output/report.md`, o terminal e `output/health.json` mostram a classificação.
+Ausência de promoções em CRITICAL não significa que não haja ofertas nas lojas.
+
+O workflow usa `--fail-on-critical`: CRITICAL gera relatórios e retorna código 2,
+com Job Summary e gravação do cache SQLite executados mesmo nessa falha.
+Uma fonte falhar isoladamente não derruba o job se ainda há cobertura útil.
+O Telegram recebe um aviso **operacional**, separado de promoções, no máximo uma
+vez a cada 24 horas em estado CRITICAL após entrega bem-sucedida. O cooldown fica
+no SQLite restaurado pelo Actions, e uma falha de envio pode ser tentada novamente.
+Sem credenciais Telegram, não existe entrega remota; OFFLINE não envia aviso.
+
+## Testar localmente sem enviar mensagens
+
+Linux/cloud, na raiz do projeto:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pytest -q
+.venv/bin/python main.py --validate
+.venv/bin/python main.py --offline --no-alerts
+.venv/bin/python main.py --cloud --no-alerts --fail-on-critical
+```
+
+No Windows, use `python` com o ambiente virtual ativado. Os testes usam mocks,
+uma fixture JSON-LD sintética e campos selecionados de uma resposta real VTEX;
+não dependem da internet e não enviam Telegram.
+A última execução acima acessa as fontes habilitadas: inspecione o relatório,
+a cobertura e os preços reais, não apenas o código de saída. `--no-alerts`
+impede tanto alertas de promoção quanto operacionais nesse teste controlado.
+
+Para novas lojas, adicione URLs **reais verificadas** em
+`sources.structured_pages.pages` com `store`, `url` e `target_id`, e só então
+habilite `enabled`/`cloud_enabled`. Não use busca HTML protegida como uma API.
+O parser aceita Product/Offer JSON-LD, grafos e variantes, rejeitando preço de
+família (`AggregateOffer`), moeda diferente, estoque indisponível e preços
+expirados/restritos detectáveis. Uma página sem capacidade comprovada ou somente
+com texto monetário não produz oferta. Verifique condições de uso e estabilidade
+da fonte antes de automatizar; a extensão por si só não aumenta a cobertura.
+
+## Testar no GitHub Actions
+
+Depois da revisão e merge manual deste PR, rode **Radar de celulares > Run
+workflow**. O teste opcional Telegram existente permanece disponível. Confira:
+
+1. Os testes passam no runner.
+2. O Job Summary mostra saúde, lojas e variantes cobertas, e falhas/ignoradas.
+3. CRITICAL deixa o job com falha; DEGRADED permanece visível no relatório.
+4. O passo de persistência salva o SQLite mesmo em CRITICAL; a execução seguinte
+   restaura histórico e cooldown.
+5. Confira uma oferta diretamente na loja e confirme capacidade, condição,
+   estoque, preço direto e frete. Não conclua sucesso de uma fonte por um job verde.
+
+O agendamento, execução manual, teste Telegram e retenção de histórico foram
+preservados. Nenhum secret foi modificado. O cache continua sendo conveniência
+sem garantia de durabilidade; se for perdido, histórico e cooldown recomeçam.
