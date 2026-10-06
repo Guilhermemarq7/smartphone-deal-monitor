@@ -1,0 +1,224 @@
+budget:
+  ideal: 3000
+  soft_limit: 3200
+  exceptional_limit: 3500
+
+monitor:
+  interval_minutes: 30
+
+bootstrap:
+  reference_file: data/bootstrap/radar_celulares_10-10_2026.md
+  research_date: '2026-10-05'
+
+database:
+  path: data/radar.db
+  retention_days: 120
+  collector_run_retention_days: 30
+  alert_event_retention_days: 30
+
+output:
+  dir: output
+
+logging:
+  file: logs/radar.log
+
+analysis:
+  outlier_ratio: 0.60
+  max_plausible_price: 20000
+
+discovery:
+  enabled: true
+  max_offer_price: 3500
+  min_quality_score: 70
+  target_price: 3200
+
+condition:
+  new_only: true
+
+alerts:
+  min_score: 76
+  alert_outliers: true
+  repeat_after_hours: 24
+  log_file: logs/opportunities.log
+  telegram:
+    enabled: true
+  discord:
+    enabled: false
+
+sources:
+  mercadolivre:
+    enabled: true
+    timeout_seconds: 12
+    retries: 2
+    min_delay_seconds: 1.2
+    results_per_query: 20
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    discovery_queries:
+      - 'Samsung Galaxy Ultra 256GB'
+      - 'Samsung Galaxy S26 256GB'
+      - 'Motorola Edge Pro 256GB'
+      - 'Xiaomi 15T 256GB'
+      - 'POCO F7 512GB'
+      - 'iPhone 16 128GB'
+  magalu:
+    enabled: true
+    timeout_seconds: 12
+    retries: 2
+    min_delay_seconds: 1.5
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    discovery_queries:
+      - 'Galaxy S Ultra 256GB'
+      - 'Motorola Edge Pro 256GB'
+      - 'Xiaomi 256GB'
+      - 'iPhone 16 128GB'
+  official_pages:
+    enabled: true
+    timeout_seconds: 12
+    retries: 2
+    min_delay_seconds: 1.5
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartphoneDealMonitor/1.0'
+    pages:
+      - target_id: galaxy_s25_256
+        store: Samsung
+        url: https://shop.samsung.com/br/galaxy-s25-256gb/p
+      - target_id: galaxy_s26_256
+        store: Samsung
+        url: https://shop.samsung.com/br/galaxy-s26/p?skuId=13648
+      - target_id: edge_70_pro_256
+        store: Motorola
+        url: https://www.motorola.com.br/smartphone-motorola-edge-70-pro-5g-256gb/p
+      - target_id: edge_60_pro_512
+        store: Motorola
+        url: https://www.motorola.com.br/smartphone-motorola-edge-60-pro-5g-512gb/p?idsku=1779
+
+phones:
+  - id: galaxy_s25_fe_256
+    name: Samsung Galaxy S25 FE 256GB
+    brand: Samsung
+    aliases: ['Galaxy S25 FE 256GB', 'Samsung S25 FE 256GB']
+    storage_gb: 256
+    alert_below: 2900
+    strong_buy_below: 2800
+    dream_price: 2700
+    priority: medium_low
+    upgrade_score: 64
+    bootstrap_recent: 2999.70
+    bootstrap_low: 2781
+
+  - id: galaxy_s25_256
+    name: Samsung Galaxy S25 256GB
+    brand: Samsung
+    aliases: ['Galaxy S25 256GB', 'Samsung S25 256GB']
+    storage_gb: 256
+    alert_below: 3350
+    strong_buy_below: 3200
+    dream_price: 3000
+    priority: high
+    upgrade_score: 78
+    bootstrap_recent: 3531.85
+    bootstrap_low: 3158
+
+  - id: edge_70_pro_256
+    name: Motorola Edge 70 Pro 256GB
+    brand: Motorola
+    aliases: ['Motorola Edge 70 Pro 256GB', 'Edge 70 Pro 256GB']
+    storage_gb: 256
+    alert_below: 2900
+    strong_buy_below: 2600
+    dream_price: 2300
+    priority: high
+    upgrade_score: 86
+    bootstrap_recent: 3284.10
+    bootstrap_low: 2149
+
+  - id: edge_60_pro_512
+    name: Motorola Edge 60 Pro 512GB
+    brand: Motorola
+    aliases: ['Motorola Edge 60 Pro 512GB', 'Edge 60 Pro 512GB']
+    storage_gb: 512
+    alert_below: 2600
+    strong_buy_below: 2450
+    dream_price: 2300
+    priority: medium
+    upgrade_score: 76
+    bootstrap_recent: 2696.10
+    bootstrap_low: 2418.13
+
+  - id: xiaomi_15t_256
+    name: Xiaomi 15T 256GB
+    brand: Xiaomi
+    aliases: ['Xiaomi 15T 256GB', '15T 256GB']
+    storage_gb: 256
+    alert_below: 3000
+    strong_buy_below: 2850
+    dream_price: 2750
+    priority: high
+    upgrade_score: 84
+    bootstrap_recent: 3378.08
+    bootstrap_low: 2748.08
+
+  - id: poco_f7_512
+    name: POCO F7 512GB
+    brand: POCO
+    aliases: ['POCO F7 512GB', 'Xiaomi POCO F7 512GB']
+    storage_gb: 512
+    alert_below: 2850
+    strong_buy_below: 2700
+    dream_price: 2500
+    priority: medium
+    upgrade_score: 79
+    bootstrap_recent: 3099
+    bootstrap_low: 2667
+
+  - id: iphone_15_128
+    name: Apple iPhone 15 128GB
+    brand: Apple
+    aliases: ['iPhone 15 128GB', 'Apple iPhone 15 128GB']
+    storage_gb: 128
+    alert_below: 3400
+    strong_buy_below: 3200
+    dream_price: 3000
+    priority: medium_low
+    upgrade_score: 68
+    bootstrap_recent: 3498.76
+    bootstrap_low: 3482
+
+aspirational:
+  - id: galaxy_s26_256
+    name: Samsung Galaxy S26 256GB
+    brand: Samsung
+    aliases: ['Galaxy S26 256GB', 'Samsung S26 256GB']
+    storage_gb: 256
+    alert_below: 3600
+    strong_buy_below: 3400
+    dream_price: 3200
+    priority: very_high
+    upgrade_score: 90
+    bootstrap_recent: 4300
+    bootstrap_low: 3522.83
+
+  - id: galaxy_s24_ultra_256
+    name: Samsung Galaxy S24 Ultra 256GB
+    brand: Samsung
+    aliases: ['Galaxy S24 Ultra 256GB', 'Samsung S24 Ultra 256GB']
+    storage_gb: 256
+    alert_below: 3900
+    strong_buy_below: 3700
+    dream_price: 3500
+    priority: very_high
+    upgrade_score: 96
+    bootstrap_recent: 3849
+    bootstrap_low: 3447
+
+  - id: iphone_16_128
+    name: Apple iPhone 16 128GB
+    brand: Apple
+    aliases: ['iPhone 16 128GB', 'Apple iPhone 16 128GB']
+    storage_gb: 128
+    alert_below: 4000
+    strong_buy_below: 3700
+    dream_price: 3500
+    priority: medium_high
+    upgrade_score: 76
+    bootstrap_recent: 4500
+    bootstrap_low: 3999
