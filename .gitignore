@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+*.pyc
+*.pyo
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+logs/*.log
+logs/*.jsonl
+output/*.csv
+output/*.md
+!output/.gitkeep
+!logs/.gitkeep
