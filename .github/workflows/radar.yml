@@ -3,6 +3,11 @@ name: Radar de celulares
 on:
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: "Testar a coleta sem enviar alertas de promoção ou operacionais"
+        required: false
+        default: true
+        type: boolean
       send_test_telegram:
         description: "Enviar mensagem de teste do Telegram antes da coleta"
         required: false
@@ -47,7 +52,7 @@ jobs:
           cache: 'pip'
 
       - name: Restaurar histórico SQLite
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: data/radar.db
           key: radar-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -57,6 +62,9 @@ jobs:
       - name: Instalar dependências
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
+      - name: Executar testes
+        run: python -m pytest -q
+
       - name: Validar configuração cloud
         run: python tools/cloud_preflight.py
 
@@ -65,7 +73,17 @@ jobs:
         run: python tools/telegram_test.py
 
       - name: Executar radar
-        run: python main.py
+        shell: bash
+        env:
+          RADAR_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          EXTRA_ARGS=()
+          # Manual runs enable alerts only when dry_run is literally false.
+          # Missing, null or empty inputs must remain safe before merge.
+          if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${RADAR_DRY_RUN:-}" != "false" ]]; then
+            EXTRA_ARGS+=(--no-alerts)
+          fi
+          python main.py --cloud --fail-on-critical "${EXTRA_ARGS[@]}"
 
       - name: Mostrar relatório no resumo da execução
         if: always()
@@ -76,3 +94,12 @@ jobs:
           else
             echo "Nenhum report.md foi gerado." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Only main publishes state; branch tests may restore production history.
+      # Preserve main history and alert cooldown even when CRITICAL returns nonzero.
+      - name: Persistir histórico mesmo com coleta crítica
+        if: ${{ always() && github.ref == 'refs/heads/main' && hashFiles('data/radar.db') != '' }}
+        uses: actions/cache/save@v6
+        with:
+          path: data/radar.db
+          key: radar-state-${{ github.run_id }}-${{ github.run_attempt }}

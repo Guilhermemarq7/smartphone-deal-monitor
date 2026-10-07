@@ -3,31 +3,38 @@ from __future__ import annotations
 import re,time
 from urllib.parse import quote, urljoin
 from bs4 import BeautifulSoup
-from .base import CollectorResult, build_session
+from .base import CollectorResult, build_session, error_reason, stop_source
 from ..models import Offer, Target
-from ..normalize import detect_condition, extract_storage_gb, is_accessory, match_target, infer_brand
+from ..normalize import detect_condition, extract_storage_gb, is_accessory, match_target, infer_brand, parse_brl
 
 class MagaluCollector:
     name="Magalu"
     def __init__(self,cfg:dict):
         self.cfg=cfg; self.timeout=float(cfg.get("timeout_seconds",12)); self.delay=float(cfg.get("min_delay_seconds",1.5))
-        self.s=build_session(cfg.get("user_agent","Mozilla/5.0 SmartphoneDealMonitor/1.0"),int(cfg.get("retries",2)))
+        self.s=build_session(cfg.get("user_agent","SmartphoneDealMonitor/1.0"),int(cfg.get("retries",2)))
+        self.blocked=""
 
     def collect(self,targets:list[Target])->CollectorResult:
         offers=[]; errors=[]
         for i,t in enumerate(targets):
             try: offers.extend(self._search(t.name,t,targets))
-            except Exception as e: errors.append(f"{t.id}: {type(e).__name__}: {e}")
+            except Exception as e:
+                reason=error_reason(e); errors.append(reason)
+                if stop_source(e): self.blocked=reason; break
             if i<len(targets)-1: time.sleep(self.delay)
-        return CollectorResult(self.name,offers,bool(offers) or not errors,(f"{len(offers)} ofertas"+(f"; {len(errors)} falhas" if errors else "")))
+        return CollectorResult(self.name,offers,not errors,(f"{len(offers)} ofertas"+(f"; {len(errors)} falhas: {', '.join(sorted(set(errors)))}" if errors else "")),reason=errors[0] if errors else "")
 
     def discover(self,targets:list[Target])->CollectorResult:
+        if self.blocked:
+            return CollectorResult(self.name+" discovery",[],False,"Fonte suspensa nesta coleta: "+self.blocked,"skipped",self.blocked)
         qs=self.cfg.get("discovery_queries",["galaxy s ultra","motorola edge pro","xiaomi","iphone"]); offers=[]; errors=[]
         for q in qs:
             try: offers.extend(self._search(q,None,targets))
-            except Exception as e: errors.append(f"{q}: {e}")
+            except Exception as e:
+                reason=error_reason(e); errors.append(reason)
+                if stop_source(e): self.blocked=reason; break
             time.sleep(self.delay)
-        return CollectorResult(self.name+" discovery",offers,bool(offers) or not errors,"; ".join(errors[:3]) if errors else f"{len(offers)} candidatos")
+        return CollectorResult(self.name+" discovery",offers,not errors,"; ".join(errors[:3]) if errors else f"{len(offers)} candidatos",reason=errors[0] if errors else "")
 
     def _search(self,q:str,target:Target|None,targets:list[Target]):
         url="https://www.magazineluiza.com.br/busca/"+quote(q,safe="")+"/"
@@ -46,11 +53,20 @@ class MagaluCollector:
                 txt=container.get_text(" ",strip=True)
                 if "R$" in txt and len(txt)<3500: break
             txt=container.get_text(" ",strip=True)
+            # A price must belong to this card; do not borrow a neighbouring product.
+            product_urls={node.get('href') for node in container.select('a[href*="/p/"]')}
+            if len(product_urls)>1: continue
+            clean=BeautifulSoup(str(container),"html.parser")
+            for crossed in clean.select('s, del, strike'): crossed.decompose()
+            txt=clean.get_text(" ",strip=True)
             pix=_context_price(txt,"pix")
-            prices=_all_prices(txt)
-            base=(pix or (min(prices) if prices else None))
+            # Text minima can be installments/cashback. Accept only explicit full Pix
+            # price or product-scoped metadata, never min(all currency amounts).
+            amount=clean.select_one('[itemprop="price"]')
+            base=parse_brl(amount.get('content') or amount.get_text()) if amount else pix
             if not base or base<200: continue
-            found=target or match_target(title,targets)
+            found=match_target(title,targets)
+            if target and (not found or found.id != target.id): continue
             storage=extract_storage_gb(title)
             if found and storage != found.storage_gb:
                 continue
@@ -84,7 +100,7 @@ def _all_prices(text):
 
 def _context_price(text,word):
     # price usually appears immediately before "no Pix" on Magalu pages/cards.
-    pat=re.compile(r"R\$\s*([0-9\.]+,[0-9]{2}).{0,45}?"+re.escape(word),re.I)
+    pat=re.compile(r"R\$\s*([0-9\.]+,[0-9]{2})\s*(?:[àa]\s*vista\s*)?(?:no\s+)?"+re.escape(word)+r"\b",re.I)
     vals=[]
     for m in pat.finditer(text):
         try: vals.append(float(m.group(1).replace(".","").replace(",",".")))
