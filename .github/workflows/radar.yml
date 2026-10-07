@@ -73,7 +73,17 @@ jobs:
         run: python tools/telegram_test.py
 
       - name: Executar radar
-        run: python main.py --cloud --fail-on-critical ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--no-alerts' || '' }}
+        shell: bash
+        env:
+          RADAR_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          EXTRA_ARGS=()
+          # Manual runs enable alerts only when dry_run is literally false.
+          # Missing, null or empty inputs must remain safe before merge.
+          if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${RADAR_DRY_RUN:-}" != "false" ]]; then
+            EXTRA_ARGS+=(--no-alerts)
+          fi
+          python main.py --cloud --fail-on-critical "${EXTRA_ARGS[@]}"
 
       - name: Mostrar relatório no resumo da execução
         if: always()

@@ -627,7 +627,9 @@ da fonte antes de automatizar; a extensão por si só não aumenta a cobertura.
 Rode **Radar de celulares > Run workflow** e selecione a branch a testar.
 O input `dry_run` começa marcado: o radar usa `--no-alerts`, consulta as fontes
 e gera relatórios sem enviar alertas de promoção ou operacionais. Desmarque-o
-para habilitar alertas na execução manual. O agendamento mantém alertas habilitados.
+para habilitar alertas na execução manual. Mesmo se o input estiver ausente,
+nulo ou vazio, o Bash aplica `--no-alerts`; somente o valor literal `false`
+habilita alertas manuais. O agendamento mantém alertas habilitados.
 `send_test_telegram` é independente: marcá-lo envia a mensagem de teste mesmo
 em dry-run. Confira:
 
