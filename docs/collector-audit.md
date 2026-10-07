@@ -164,7 +164,10 @@ acrescentados coletores apenas para aumentar a quantidade.
 Só ofertas aceitas após filtros contam. Bootstrap e discovery não substituem
 cobertura da watchlist. O relatório, terminal e `output/health.json` mostram o
 estado. `--fail-on-critical` retorna 2 após relatórios/alertas; o workflow usa
-essa opção e conserva Summary/cache com `always()`, mesmo em CRITICAL.
+essa opção e conserva Summary com `always()`, mesmo em CRITICAL. O cache SQLite
+é salvo somente em `refs/heads/main`; testes de branch podem restaurá-lo sem
+publicar um novo estado persistente. Execuções manuais usam `dry_run: true`
+por padrão para suprimir alertas do radar; o teste Telegram é opt-in independente.
 
 O Telegram operacional usa uma tabela SQLite aditiva e cooldown global de 24 h
 para CRITICAL, separado de promoções. Marca entrega somente após sucesso; uma

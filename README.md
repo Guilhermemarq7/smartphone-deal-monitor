@@ -584,7 +584,9 @@ Ajuste os limiares na seção `health` do `config.yaml`. Contamos lojas e varian
 Ausência de promoções em CRITICAL não significa que não haja ofertas nas lojas.
 
 O workflow usa `--fail-on-critical`: CRITICAL gera relatórios e retorna código 2,
-com Job Summary e gravação do cache SQLite executados mesmo nessa falha.
+com Job Summary executado mesmo nessa falha. O cache SQLite só é salvo em
+`refs/heads/main`, inclusive em CRITICAL; testes em outras branches podem
+restaurar o histórico, mas não publicam um novo estado persistente.
 Uma fonte falhar isoladamente não derruba o job se ainda há cobertura útil.
 O Telegram recebe um aviso **operacional**, separado de promoções, no máximo uma
 vez a cada 24 horas em estado CRITICAL após entrega bem-sucedida. O cooldown fica
@@ -622,14 +624,19 @@ da fonte antes de automatizar; a extensão por si só não aumenta a cobertura.
 
 ## Testar no GitHub Actions
 
-Depois da revisão e merge manual deste PR, rode **Radar de celulares > Run
-workflow**. O teste opcional Telegram existente permanece disponível. Confira:
+Rode **Radar de celulares > Run workflow** e selecione a branch a testar.
+O input `dry_run` começa marcado: o radar usa `--no-alerts`, consulta as fontes
+e gera relatórios sem enviar alertas de promoção ou operacionais. Desmarque-o
+para habilitar alertas na execução manual. O agendamento mantém alertas habilitados.
+`send_test_telegram` é independente: marcá-lo envia a mensagem de teste mesmo
+em dry-run. Confira:
 
 1. Os testes passam no runner.
 2. O Job Summary mostra saúde, lojas e variantes cobertas, e falhas/ignoradas.
 3. CRITICAL deixa o job com falha; DEGRADED permanece visível no relatório.
-4. O passo de persistência salva o SQLite mesmo em CRITICAL; a execução seguinte
-   restaura histórico e cooldown.
+4. Em `main`, o passo de persistência salva o SQLite mesmo em CRITICAL; a execução
+   seguinte restaura histórico e cooldown. Nas outras branches, o salvamento é
+   ignorado, preservando o estado usado por produção.
 5. Confira uma oferta diretamente na loja e confirme capacidade, condição,
    estoque, preço direto e frete. Não conclua sucesso de uma fonte por um job verde.
 

@@ -3,6 +3,11 @@ name: Radar de celulares
 on:
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: "Testar a coleta sem enviar alertas de promoção ou operacionais"
+        required: false
+        default: true
+        type: boolean
       send_test_telegram:
         description: "Enviar mensagem de teste do Telegram antes da coleta"
         required: false
@@ -68,7 +73,7 @@ jobs:
         run: python tools/telegram_test.py
 
       - name: Executar radar
-        run: python main.py --cloud --fail-on-critical
+        run: python main.py --cloud --fail-on-critical ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--no-alerts' || '' }}
 
       - name: Mostrar relatório no resumo da execução
         if: always()
@@ -80,9 +85,10 @@ jobs:
             echo "Nenhum report.md foi gerado." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # CRITICAL returns a nonzero exit code, but history and alert cooldown must survive.
+      # Only main publishes state; branch tests may restore production history.
+      # Preserve main history and alert cooldown even when CRITICAL returns nonzero.
       - name: Persistir histórico mesmo com coleta crítica
-        if: ${{ always() && hashFiles('data/radar.db') != '' }}
+        if: ${{ always() && github.ref == 'refs/heads/main' && hashFiles('data/radar.db') != '' }}
         uses: actions/cache/save@v6
         with:
           path: data/radar.db
